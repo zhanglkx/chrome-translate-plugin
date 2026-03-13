@@ -358,11 +358,25 @@ async function smartTranslate(text) {
   }
 }
 
-// 消息处理
+// 消息处理 - 健壮的错误处理
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  console.log('📨 background 收到消息:', { type: request.type, text: request.text });
+  console.log('📨 background 收到消息:', { type: request.type, text: request.text?.substring(0, 30) });
+  
+  // 验证请求格式
+  if (!request || !request.type) {
+    console.error('❌ 请求格式错误');
+    sendResponse({ success: false, translation: '❌ 请求格式错误' });
+    return false;
+  }
   
   if (request.type === 'TRANSLATE_REQUEST') {
+    // 验证文本
+    if (!request.text || typeof request.text !== 'string') {
+      console.error('❌ 翻译文本无效');
+      sendResponse({ success: false, translation: '❌ 文本无效' });
+      return false;
+    }
+    
     // 创建异步处理函数
     const handleTranslation = async () => {
       try {
@@ -377,7 +391,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         };
         
         console.log('📤 sendResponse 发送:', response);
-        sendResponse(response);
+        try {
+          sendResponse(response);
+        } catch (e) {
+          console.error('❌ sendResponse 失败 (context 可能已失效):', e.message);
+        }
       } catch (error) {
         console.error('❌ 翻译处理异常:', error);
         const errorResponse = {
@@ -387,7 +405,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           error: error.message
         };
         console.log('📤 sendResponse 发送错误:', errorResponse);
-        sendResponse(errorResponse);
+        try {
+          sendResponse(errorResponse);
+        } catch (e) {
+          console.error('❌ sendResponse 失败 (错误响应):', e.message);
+        }
       }
     };
     
@@ -397,6 +419,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // 返回 true 表示异步响应
     return true;
   }
+  
+  // 其他消息类型
+  console.warn('⚠️ 未知的消息类型:', request.type);
+  return false;
 });
 
 // 命令处理（可选的快捷键支持）

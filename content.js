@@ -36,7 +36,7 @@ function createIndicatorDot() {
     indicatorDot.style.boxShadow = '0 2px 8px rgba(76, 175, 80, 0.35)';
   });
   
-  // 点击事件 - 发送翻译请求
+  // 点击事件 - 发送翻译请求（带重试机制）
   indicatorDot.addEventListener('click', async (e) => {
     e.stopPropagation();
     
@@ -48,40 +48,85 @@ function createIndicatorDot() {
     console.log('🎯 点击翻译小点，发送翻译请求');
     
     const { text, position } = pendingTranslation;
+    let retryCount = 0;
+    const maxRetries = 3;
     
-    try {
-      chrome.runtime.sendMessage({
-        type: 'TRANSLATE_REQUEST',
-        text: text,
-        position: position
-      }, (response) => {
-        console.log('📥 background 响应:', response);
-        
-        if (chrome.runtime.lastError) {
-          console.error('❌ 消息错误:', chrome.runtime.lastError.message);
-          showTranslation(text, `❌ 消息错误: ${chrome.runtime.lastError.message}`, position);
+    // 带重试的消息发送
+    const sendTranslationRequest = () => {
+      try {
+        // 验证 chrome.runtime 是否可用
+        if (!chrome || !chrome.runtime) {
+          console.error('❌ Chrome Runtime 不可用');
+          showTranslation(text, '❌ 扩展程序上下文失效，请刷新页面', position);
           return;
         }
         
-        if (!response) {
-          console.error('❌ 收到空响应');
-          showTranslation(text, '❌ 无响应', position);
+        console.log(`📤 发送翻译请求 (尝试 ${retryCount + 1}/${maxRetries})`);
+        
+        chrome.runtime.sendMessage({
+          type: 'TRANSLATE_REQUEST',
+          text: text,
+          position: position
+        }, (response) => {
+          console.log('📥 background 响应:', response);
+          
+          // 检查上下文是否失效
+          if (chrome.runtime.lastError) {
+            const errorMsg = chrome.runtime.lastError.message;
+            console.error('❌ 消息错误:', errorMsg);
+            
+            // 如果是 context invalidated，尝试重试
+            if (errorMsg.includes('context invalidated') && retryCount < maxRetries) {
+              retryCount++;
+              console.log(`⏳ Context 失效，${500}ms 后重试...`);
+              setTimeout(sendTranslationRequest, 500);
+              return;
+            }
+            
+            // 重试次数已尽
+            showTranslation(text, `❌ 通信失败: ${errorMsg}`, position);
+            return;
+          }
+          
+          if (!response) {
+            console.error('❌ 收到空响应');
+            showTranslation(text, '❌ 无响应，请稍后重试', position);
+            return;
+          }
+          
+          // 验证响应格式
+          if (typeof response !== 'object' || !('translation' in response)) {
+            console.error('❌ 响应格式错误:', response);
+            showTranslation(text, '❌ 返回格式错误', position);
+            return;
+          }
+          
+          if (response.translation) {
+            console.log('✓ 成功显示翻译');
+            showTranslation(text, response.translation, response.position || position);
+            hideIndicatorDot(); // 隐藏小点
+          } else {
+            console.error('❌ 获取翻译为空:', response);
+            showTranslation(text, '❌ 获取翻译失败', position);
+          }
+        });
+      } catch (error) {
+        console.error('❌ 发送消息异常:', error);
+        
+        // 重试机制
+        if (retryCount < maxRetries && error.message.includes('context')) {
+          retryCount++;
+          console.log(`⏳ 异常类型需要重试，${500}ms 后重试...`);
+          setTimeout(sendTranslationRequest, 500);
           return;
         }
         
-        if (response.translation) {
-          console.log('✓ 成功显示翻译');
-          showTranslation(text, response.translation, response.position || position);
-          hideIndicatorDot(); // 隐藏小点
-        } else {
-          console.error('❌ 响应格式错误:', response);
-          showTranslation(text, '❌ 返回格式错误', position);
-        }
-      });
-    } catch (error) {
-      console.error('❌ 发送消息异常:', error);
-      showTranslation(text, `❌ 异常: ${error.message}`, position);
-    }
+        showTranslation(text, `❌ 通信异常: ${error.message}`, position);
+      }
+    };
+    
+    // 启动消息发送
+    sendTranslationRequest();
   });
   
   document.body.appendChild(indicatorDot);
