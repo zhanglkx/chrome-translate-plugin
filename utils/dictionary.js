@@ -1,14 +1,15 @@
-// utils/dictionary.js - 词典管理器
+// utils/dictionary.js - 词典管理模块 (支持双向翻译)
 class Dictionary {
     constructor() {
-        this.words = {};
+        this.englishToChinese = {};  // 英文→中文
+        this.chineseToEnglish = {};  // 中文→英文
         this.loadDictionary();
     }
 
     loadDictionary() {
         try {
-            // 这里可以加载更完整的词典，暂时使用基础示例
-            this.words = {
+            // 英文→中文词典
+            this.englishToChinese = {
                 'hello': '你好',
                 'world': '世界',
                 'thank': '谢谢',
@@ -20,156 +21,108 @@ class Dictionary {
                 'yes': '是',
                 'no': '否',
                 'ok': '好的',
-                'bye': '再见',
-                'see': '看见',
-                'you': '你',
-                'later': '以后',
-                'how': '如何',
-                'are': '是',
-                'what': '什么',
-                'where': '哪里',
-                'when': '何时',
-                'why': '为什么',
-                'who': '谁',
-                'which': '哪个',
-                'this': '这个',
-                'that': '那个',
-                'it': '它',
-                'is': '是',
-                'am': '是',
-                'was': '是',
-                'were': '是',
-                'be': '是',
-                'been': '是',
-                'being': '是',
-                'have': '有',
-                'has': '有',
-                'had': '有',
-                'do': '做',
-                'does': '做',
-                'did': '做',
-                'will': '将',
-                'would': '会',
-                'can': '能',
-                'could': '能',
-                'should': '应该',
-                'may': '可能',
-                'might': '可能',
-                'must': '必须',
-                'shall': '将',
-                'ought': '应该',
-                'i': '我',
-                'me': '我',
-                'my': '我的',
-                'mine': '我的',
-                'you': '你',
-                'your': '你的',
-                'yours': '你的',
-                'he': '他',
-                'him': '他',
-                'his': '他的',
-                'she': '她',
-                'her': '她',
-                'hers': '她的',
-                'it': '它',
-                'its': '它的',
-                'we': '我们',
-                'us': '我们',
-                'our': '我们的',
-                'ours': '我们的',
-                'they': '他们',
-                'them': '他们',
-                'their': '他们的',
-                'theirs': '他们的',
-                'and': '和',
-                'but': '但是',
-                'or': '或者',
-                'if': '如果',
-                'because': '因为',
-                'as': '作为',
-                'until': '直到',
-                'while': '当',
-                'of': '的',
-                'at': '在',
-                'by': '通过',
-                'for': '为了',
-                'with': '和',
-                'about': '关于',
-                'against': '反对',
-                'between': '之间',
-                'into': '进入',
-                'through': '通过',
-                'during': '在...期间',
-                'before': '在...之前',
-                'after': '在...之后',
-                'above': '在...之上',
-                'below': '在...之下',
-                'to': '到',
-                'from': '从',
-                'up': '向上',
-                'down': '向下',
-                'in': '在...里面',
-                'out': '在外面',
-                'on': '在...上面',
-                'off': '关闭',
-                'over': '在...上方',
-                'under': '在...下方',
-                'again': '再次',
-                'further': '进一步',
-                'then': '然后',
-                'once': '一旦',
-                'here': '这里',
-                'there': '那里',
-                'when': '当',
-                'where': '哪里',
-                'why': '为什么',
-                'how': '如何',
-                'all': '所有',
-                'any': '任何',
-                'both': '两者',
-                'each': '每个',
-                'few': '少数',
-                'more': '更多',
-                'most': '最多',
-                'other': '其他',
-                'some': '一些',
-                'such': '这样的',
-                'no': '没有',
-                'nor': '也不',
-                'not': '不',
-                'only': '只有',
-                'own': '自己的',
-                'same': '相同的',
-                'so': '所以',
-                'than': '比',
-                'too': '太',
-                'very': '非常',
-                'can': '能',
-                'will': '将',
-                'just': '只是',
-                'don': '不',
-                'should': '应该',
-                'now': '现在'
+                'love': '爱',
+                'happy': '开心',
+                'sad': '伤心',
+                'beautiful': '漂亮',
+                'friend': '朋友',
+                'family': '家庭',
+                'mother': '妈妈',
+                'father': '爸爸',
+                'sister': '姐姐',
+                'brother': '哥哥',
+                'apple': '苹果',
+                'orange': '橙子',
+                'banana': '香蕉',
+                'red': '红色',
+                'blue': '蓝色',
+                'green': '绿色',
+                'yellow': '黄色',
+                'big': '大',
+                'small': '小',
+                'hot': '热',
+                'cold': '冷',
+                'fast': '快',
+                'slow': '慢',
+                'new': '新',
+                'old': '旧',
+                'help': '帮助',
+                'work': '工作',
+                'play': '玩',
+                'eat': '吃',
+                'drink': '喝',
+                'laugh': '笑',
+                'cry': '哭'
             };
+            
+            // 构建双向词典
+            this.buildReverseDict();
         } catch (e) {
             console.error('加载词典失败:', e);
         }
     }
 
+    buildReverseDict() {
+        // 从英文→中文词典构建中文→英文反向词典
+        for (const [english, chinese] of Object.entries(this.englishToChinese)) {
+            this.chineseToEnglish[chinese] = english;
+        }
+    }
+
+    /**
+     * 查询词典（支持双向）
+     * @param {string} word - 查询的单词或汉字
+     * @returns {string|null} - 翻译结果或 null
+     */
     lookup(word) {
-        return this.words[word.toLowerCase()] || null;
+        const lowerWord = word.toLowerCase();
+        
+        // 先尝试英文→中文
+        if (this.englishToChinese[lowerWord]) {
+            return this.englishToChinese[lowerWord];
+        }
+        
+        // 再尝试中文→英文（反向查询）
+        if (this.chineseToEnglish[word]) {
+            return this.chineseToEnglish[word];
+        }
+        
+        return null;
     }
 
+    /**
+     * 判断是否为简单单词或短词
+     * @param {string} text - 待判断的文本
+     * @returns {boolean}
+     */
     isSimpleWord(text) {
-        // 判断是否为简单单词（1-3个单词）
-        return text.split(' ').length <= 3;
+        // 英文单词数不超过3个
+        const englishWords = text.split(' ');
+        if (englishWords.length <= 3) {
+            return true;
+        }
+        
+        // 或者中文字符不超过3个
+        const chineseChars = (text.match(/[\u4e00-\u9fff]/g) || []);
+        if (chineseChars.length <= 3 && chineseChars.length > 0) {
+            return true;
+        }
+        
+        return false;
     }
 
-    getWordCount(text) {
-        return text.split(' ').length;
+    /**
+     * 获取词典统计信息
+     * @returns {object} - 词典统计数据
+     */
+    getStats() {
+        return {
+            englishToChinese: Object.keys(this.englishToChinese).length,
+            chineseToEnglish: Object.keys(this.chineseToEnglish).length,
+            total: Object.keys(this.englishToChinese).length + Object.keys(this.chineseToEnglish).length
+        };
     }
 }
 
 // 导出单例实例
 const dictionary = new Dictionary();
-export { dictionary };
