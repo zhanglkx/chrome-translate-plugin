@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "ARI 划词翻译",
-  "version": "1.0.0",
-  "description": "使用DeepSeek API的划词翻译插件",
+  "version": "2.1.0",
+  "description": "使用DeepSeek API的划词翻译插件 - 非侵入式设计，英汉双向自动检测",
   "permissions": [
     "activeTab",
     "storage",
