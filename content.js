@@ -1,6 +1,112 @@
-// content.js - 内容脚本
+// content.js - 非侵入式翻译界面 (划词→小点→点击翻译)
 let translationPopup = null;
 let popupTimeout = null;
+let indicatorDot = null;
+let pendingTranslation = null; // 存储待翻译的文本信息
+
+// 创建小点指示符
+function createIndicatorDot() {
+  if (indicatorDot) {
+    indicatorDot.remove();
+  }
+  
+  indicatorDot = document.createElement('div');
+  indicatorDot.id = 'translation-indicator';
+  indicatorDot.style.cssText = `
+    position: fixed;
+    width: 12px;
+    height: 12px;
+    background: linear-gradient(135deg, #4CAF50, #45a049);
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 999998;
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.35);
+    transition: all 0.2s ease;
+    display: none;
+  `;
+  
+  // 悬停效果
+  indicatorDot.addEventListener('mouseover', () => {
+    indicatorDot.style.transform = 'scale(1.3)';
+    indicatorDot.style.boxShadow = '0 4px 12px rgba(76, 175, 80, 0.5)';
+  });
+  
+  indicatorDot.addEventListener('mouseout', () => {
+    indicatorDot.style.transform = 'scale(1)';
+    indicatorDot.style.boxShadow = '0 2px 8px rgba(76, 175, 80, 0.35)';
+  });
+  
+  // 点击事件 - 发送翻译请求
+  indicatorDot.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    
+    if (!pendingTranslation) {
+      console.log('❌ 没有待翻译的文本');
+      return;
+    }
+    
+    console.log('🎯 点击翻译小点，发送翻译请求');
+    
+    const { text, position } = pendingTranslation;
+    
+    try {
+      chrome.runtime.sendMessage({
+        type: 'TRANSLATE_REQUEST',
+        text: text,
+        position: position
+      }, (response) => {
+        console.log('📥 background 响应:', response);
+        
+        if (chrome.runtime.lastError) {
+          console.error('❌ 消息错误:', chrome.runtime.lastError.message);
+          showTranslation(text, `❌ 消息错误: ${chrome.runtime.lastError.message}`, position);
+          return;
+        }
+        
+        if (!response) {
+          console.error('❌ 收到空响应');
+          showTranslation(text, '❌ 无响应', position);
+          return;
+        }
+        
+        if (response.translation) {
+          console.log('✓ 成功显示翻译');
+          showTranslation(text, response.translation, response.position || position);
+          hideIndicatorDot(); // 隐藏小点
+        } else {
+          console.error('❌ 响应格式错误:', response);
+          showTranslation(text, '❌ 返回格式错误', position);
+        }
+      });
+    } catch (error) {
+      console.error('❌ 发送消息异常:', error);
+      showTranslation(text, `❌ 异常: ${error.message}`, position);
+    }
+  });
+  
+  document.body.appendChild(indicatorDot);
+}
+
+// 显示指示符小点
+function showIndicatorDot(position) {
+  if (!indicatorDot) {
+    createIndicatorDot();
+  }
+  
+  indicatorDot.style.left = `${position.x - 6}px`;
+  indicatorDot.style.top = `${position.y - 6}px`;
+  indicatorDot.style.display = 'block';
+  
+  console.log(`✨ 显示翻译小点 @ (${position.x}, ${position.y})`);
+}
+
+// 隐藏指示符小点
+function hideIndicatorDot() {
+  if (indicatorDot) {
+    indicatorDot.style.display = 'none';
+  }
+  pendingTranslation = null;
+}
 
 // 创建翻译弹出框
 function createTranslationPopup() {
@@ -13,26 +119,53 @@ function createTranslationPopup() {
   translationPopup.style.cssText = `
     position: fixed;
     background: white;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    padding: 12px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    border: 2px solid #4CAF50;
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
     z-index: 999999;
-    max-width: 300px;
+    max-width: 320px;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     display: none;
+    animation: slideIn 0.3s ease-out;
   `;
   
+  // 添加动画样式
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-10px) scale(0.95);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+    
+    #translation-popup button:hover {
+      background: #e8e8e8 !important;
+    }
+    
+    #translation-popup button:active {
+      transform: scale(0.98);
+    }
+  `;
+  document.head.appendChild(style);
+  
   translationPopup.innerHTML = `
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-      <h4 style="margin: 0; font-size: 14px; color: #333;">翻译结果</h4>
-      <button id="close-popup" style="background: none; border: none; cursor: pointer; font-size: 16px; color: #666;">×</button>
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+      <div style="flex: 1;">
+        <span style="display: inline-block; font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">翻译结果</span>
+      </div>
+      <button id="close-popup" style="background: none; border: none; cursor: pointer; font-size: 18px; color: #999; padding: 0; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;">×</button>
     </div>
-    <div id="original-text" style="font-size: 13px; color: #666; margin-bottom: 8px;"></div>
-    <div id="translated-text" style="font-size: 14px; color: #333; line-height: 1.4;"></div>
-    <div style="margin-top: 8px; display: flex; gap: 8px;">
-      <button id="copy-btn" style="flex: 1; padding: 4px 8px; background: #f0f0f0; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">复制</button>
-      <button id="speak-btn" style="flex: 1; padding: 4px 8px; background: #f0f0f0; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">朗读</button>
+    <div id="original-text" style="font-size: 12px; color: #888; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #f0f0f0;"></div>
+    <div id="translated-text" style="font-size: 15px; color: #333; line-height: 1.5; margin-bottom: 12px;"></div>
+    <div style="display: flex; gap: 8px;">
+      <button id="copy-btn" style="flex: 1; padding: 8px; background: #f5f5f5; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; color: #666; transition: all 0.2s;">复制翻译</button>
+      <button id="speak-btn" style="flex: 1; padding: 8px; background: #f5f5f5; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; color: #666; transition: all 0.2s;">朗读</button>
     </div>
   `;
   
@@ -45,7 +178,14 @@ function createTranslationPopup() {
   
   document.getElementById('copy-btn').addEventListener('click', () => {
     const translatedText = document.getElementById('translated-text').textContent;
-    navigator.clipboard.writeText(translatedText);
+    navigator.clipboard.writeText(translatedText).then(() => {
+      const btn = document.getElementById('copy-btn');
+      const originalText = btn.textContent;
+      btn.textContent = '已复制 ✓';
+      setTimeout(() => {
+        btn.textContent = originalText;
+      }, 2000);
+    });
   });
   
   document.getElementById('speak-btn').addEventListener('click', () => {
@@ -59,7 +199,11 @@ function speakText(text) {
   if ('speechSynthesis' in window) {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'zh-CN';
+    
+    // 检测语言（简单判断）
+    const hasChinese = /[\u4e00-\u9fff]/.test(text);
+    utterance.lang = hasChinese ? 'zh-CN' : 'en-US';
+    
     window.speechSynthesis.speak(utterance);
   }
 }
@@ -70,60 +214,97 @@ function showTranslation(text, translation, position) {
     createTranslationPopup();
   }
   
-  document.getElementById('original-text').textContent = text;
+  document.getElementById('original-text').textContent = `原文: ${text}`;
   document.getElementById('translated-text').textContent = translation;
   
-  translationPopup.style.left = `${position.x + 10}px`;
-  translationPopup.style.top = `${position.y - translationPopup.offsetHeight - 10}px`;
+  // 弹窗位置优化：避免超出屏幕
+  let left = position.x + 15;
+  let top = position.y - translationPopup.offsetHeight - 15;
+  
+  // 确保不超出右边界
+  const maxLeft = window.innerWidth - 340;
+  if (left > maxLeft) {
+    left = maxLeft;
+  }
+  
+  // 确保不超出上边界
+  if (top < 10) {
+    top = position.y + 15;
+  }
+  
+  translationPopup.style.left = `${left}px`;
+  translationPopup.style.top = `${top}px`;
   translationPopup.style.display = 'block';
+  
+  console.log('✓ 翻译弹窗已显示:', translation);
   
   // 自动隐藏
   clearTimeout(popupTimeout);
   popupTimeout = setTimeout(() => {
     translationPopup.style.display = 'none';
-  }, 5000);
+  }, translation.startsWith('❌') ? 3000 : 6000);
 }
 
-// 监听选中文本
+// 监听选中文本 - 显示小点，不直接翻译
 document.addEventListener('mouseup', async (e) => {
   const selection = window.getSelection();
+  
   if (selection.toString().trim()) {
     const text = selection.toString().trim();
     
-    // 发送消息到background script
-    chrome.runtime.sendMessage({
-      type: 'TRANSLATE_REQUEST',
+    console.log('📝 用户选中文本:', text);
+    
+    // 保存待翻译的文本信息
+    pendingTranslation = {
       text: text,
       position: { x: e.clientX, y: e.clientY }
-    }, (response) => {
-      if (response && response.translation) {
-        showTranslation(text, response.translation, response.position);
-      }
-    });
+    };
+    
+    // 显示小点，等待用户点击
+    showIndicatorDot({ x: e.clientX, y: e.clientY });
+  } else {
+    // 没有选中文本，隐藏小点
+    hideIndicatorDot();
   }
 });
 
-// 命令触发翻译
+// 点击页面其他地方隐藏小点
+document.addEventListener('click', (e) => {
+  if (e.target !== indicatorDot && !e.target.closest('#translation-popup')) {
+    hideIndicatorDot();
+  }
+});
+
+// 键盘事件：ESC 关闭弹窗
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (translationPopup && translationPopup.style.display !== 'none') {
+      translationPopup.style.display = 'none';
+    }
+    hideIndicatorDot();
+  }
+});
+
+// 命令触发翻译（快捷键）
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === 'TRIGGER_TRANSLATION') {
     const selection = window.getSelection();
     if (selection.toString().trim()) {
       const text = selection.toString().trim();
       
+      // 快捷键直接翻译，不显示小点
       chrome.runtime.sendMessage({
         type: 'TRANSLATE_REQUEST',
         text: text,
         position: { x: window.innerWidth / 2, y: window.innerHeight / 2 }
       }, (response) => {
         if (response && response.translation) {
-          showTranslation(text, response.translation, response.position);
+          showTranslation(text, response.translation, response.position || { x: window.innerWidth / 2, y: window.innerHeight / 2 });
         }
       });
     }
   }
 });
 
-// 页面加载时创建弹出框
-window.addEventListener('load', () => {
-  createTranslationPopup();
-});
+// 初始化
+console.log('✓ ARI 划词翻译 Content Script 已加载 (非侵入式模式)');
