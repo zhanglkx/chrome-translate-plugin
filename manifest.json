@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "ARI 划词翻译",
+  "version": "1.0.0",
+  "description": "使用DeepSeek API的划词翻译插件",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "contextMenus",
+    "tabs",
+    "scripting"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "commands": {
+    "translate-selection": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Y",
+        "mac": "Command+Shift+Y"
+      },
+      "description": "翻译选中的文本"
+    }
+  }
+}
