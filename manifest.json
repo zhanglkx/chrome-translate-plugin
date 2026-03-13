@@ -10,6 +10,9 @@
     "tabs",
     "scripting"
   ],
+  "host_permissions": [
+    "https://api.deepseek.com/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
